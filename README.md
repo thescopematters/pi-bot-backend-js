@@ -69,6 +69,8 @@ cp .env.example .env
 
 npm install
 npm start
+or
+node src/server.js
 ```
 
 Server starts on `PORT` (default 5000).
