@@ -5,11 +5,13 @@
 
 import express from 'express';
 import claimRoutes from './modules/claim/routes.js';
+import cors from 'cors';
 
 import pool from './config/db.js';
 import { clearActiveJobs } from './modules/claim/service.js';
 
 const app = express();
+app.use(cors());
 
 app.use(express.json());
 
