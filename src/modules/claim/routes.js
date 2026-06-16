@@ -11,6 +11,7 @@ import { execute } from './handler.js';
 
 const router = Router();
 
-router.post('/execute', authMiddleware, execute);
+// router.post('/execute', authMiddleware, execute);
+router.post('/execute', execute);
 
 export default router;

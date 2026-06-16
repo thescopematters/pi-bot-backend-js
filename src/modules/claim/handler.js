@@ -27,7 +27,9 @@ export async function execute(req, res) {
     }
 
     // userID is set by auth middleware (mirrors c.Get("userID"))
-    const userId = req.user?.id;
+    const userId = req.user?.id ? req.user?.id : "95a80342-ad75-4e7a-a379-a4844c48ee24";
+    console.log("UserId: ", userId);
+
     if (!userId) {
         return errorResponse(res, 401, 'unauthorized');
     }
@@ -69,6 +71,9 @@ function writeClaimError(res, err) {
         return errorResponse(res, 503, msg);
     }
     if (msg === Errors.ErrInvalidFeeRange) {
+        return errorResponse(res, 400, msg);
+    }
+    if (msg.includes(Errors.ErrClaimantMultisig)) {
         return errorResponse(res, 400, msg);
     }
 

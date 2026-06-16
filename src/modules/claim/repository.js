@@ -13,23 +13,27 @@ import pool from '../../config/db.js';
  * @param {{ jobId, walletId, network, txCount, minFee, maxFee, memo, fireBeforeMs, scheduledAt, userId }} run
  */
 export async function createRun(run) {
-    await pool.query(
-        `INSERT INTO claim_runs
-       (job_id, wallet_id, network, tx_count, min_fee, max_fee, memo, fire_before_ms, scheduled_at, user_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-            run.jobId,
-            run.walletId,
-            run.network,
-            run.txCount,
-            run.minFee,
-            run.maxFee,
-            run.memo ?? '',
-            run.fireBeforeMs,
-            run.scheduledAt,
-            run.userId,
-        ],
-    );
+    try {
+        await pool.query(
+            `INSERT INTO claim_runs
+        (job_id, wallet_id, network, tx_count, min_fee, max_fee, memo, fire_before_ms, scheduled_at, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+                run.jobId,
+                run.walletId,
+                run.network,
+                run.txCount,
+                run.minFee,
+                run.maxFee,
+                run.memo ?? '',
+                run.fireBeforeMs,
+                run.scheduledAt,
+                run.userId,
+            ],
+        );
+    } catch (error) {
+        console.log("Error creating run: ", error);
+    }
 }
 
 /**

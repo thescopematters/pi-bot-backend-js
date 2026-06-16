@@ -70,8 +70,10 @@ export function buildMultiSigClaim({
         memoObj = Memo.text(truncated);
     }
 
-    // MaxTime = claimTime + validForMs. MinTime = 0
-    const maxTime = Math.floor(claimTime.getTime() / 1000) + Math.floor(validForMs / 1000);
+    // MaxTime = max(claimTime, now) + validForMs. MinTime = 0
+    // When claimTime is in the past, use current time as the base so the tx isn't born expired.
+    const baseTime = Math.max(claimTime.getTime(), Date.now());
+    const maxTime = Math.floor(baseTime / 1000) + Math.floor(validForMs / 1000);
 
     const account = new Account(feePayerAccount.accountID, feePayerAccount.sequence);
 
@@ -105,6 +107,9 @@ export function buildMultiSigClaim({
     // tx.sign(feePayerKP, claimantKP);
     tx.sign(feePayerKP);
     tx.sign(claimantKP);
+
+    // print complete transaction json
+    console.log('Complete transaction JSON: ', JSON.stringify(tx));
 
     return {
         xdr: tx.toEnvelope().toXDR('base64'),

@@ -15,7 +15,7 @@ import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
 import { Errors } from './errors.js';
 import * as repo from './repository.js';
 import { mnemonicToKeypair, mnemonicToKeypairAt } from '../../blockchain/keypair.js';
-import { loadAccount, stroopsToPi, piToStroops } from '../../blockchain/account.js';
+import { loadAccount, loadAccountFull, stroopsToPi, piToStroops } from '../../blockchain/account.js';
 import { buildMultiSigClaim, transactionHashFromXDRSync } from '../../blockchain/transaction.js';
 import { decrypt } from '../../blockchain/crypto.js';
 import { clientPool } from '../../blockchain/clientPool.js';
@@ -27,7 +27,8 @@ import logger from '../../common/logger.js';
 const BUSYWAIT_LEAD_MS = 10;    // CPU busywait final 10ms for precision
 const LEDGER_LOOKUP_ATTEMPTS = 6;
 const LEDGER_LOOKUP_INTERVAL_MS = 3000;
-const DEFAULT_VALID_FOR_MS = 15000;
+const DEFAULT_VALID_FOR_MS = 5000; // 5 seconds
+const IMMEDIATE_CLAIM_VALID_FOR_MS = 30000; // 30 seconds — generous window for past claims
 
 // ── Active jobs (mirrors sync.Map) ───────────────────────────────────────────
 const activeJobs = new Map();
@@ -134,7 +135,16 @@ async function preload(jobId, job, feeAccounts, cleanup) {
         return;
     }
 
-    log('info', `claimant verified on-chain: ${claimantKP.publicKey()} | balanceID=${job.balanceId} amount=${job.balanceAmount} | building ${feeAccounts.length} transactions...`);
+    // ── Detect past claim BEFORE building transactions ─────────────────────
+    const isPastClaim = job.claimTime.getTime() <= Date.now();
+    let effectiveValidForMs = job.validForMs;
+    if (isPastClaim) {
+        effectiveValidForMs = IMMEDIATE_CLAIM_VALID_FOR_MS;
+        feeAccounts = [feeAccounts[0]]; // Only 1 tx needed — no race to win
+        log('info', `⚡ IMMEDIATE CLAIM MODE — claimTime ${job.claimTime.toISOString()} is ${((Date.now() - job.claimTime.getTime()) / 1000).toFixed(1)}s in the past — using ${effectiveValidForMs}ms validity window, 1 tx`);
+    }
+
+    log('info', `claimant verified on-chain: ${claimantKP.publicKey()} | balanceID=${job.balanceId} amount=${job.balanceAmount} | building ${feeAccounts.length} transactions (validForMs=${effectiveValidForMs})...`);
 
     const results = await Promise.all(
         feeAccounts.map(async (fa, i) => {
@@ -154,7 +164,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
                     fee: BigInt(job.maxFee),
                     networkPassphrase: job.passphrase,
                     claimTime: job.claimTime,
-                    validForMs: job.validForMs,
+                    validForMs: effectiveValidForMs,
                 });
 
                 const hash = transaction.hash().toString('hex');
@@ -177,11 +187,19 @@ async function preload(jobId, job, feeAccounts, cleanup) {
         log('info', `  tx ${tx.index} — hash=${tx.hash} feeAccount=${tx.feeAccount} baseFee=${tx.fee}`);
     }
 
-    const adjustedFireTime = new Date(job.claimTime.getTime() - job.fireBeforeMs);
-    const fireDelay = Math.max(0, adjustedFireTime.getTime() - Date.now());
-    log('info', `⏰ FIRE SCHEDULED AT ${adjustedFireTime.toISOString()} (in ${(fireDelay / 1000).toFixed(1)}s) — ${job.fireBeforeMs}ms before claimTime ${job.claimTime.toISOString()}`);
-
-    setTimeout(() => fire(jobId, job.walletId, txs, adjustedFireTime, clients, cleanup, job.runJobId), fireDelay);
+    if (isPastClaim) {
+        // ── Immediate fire: no scheduling, no busywait ───────────────────────
+        log('info', `⚡ FIRING IMMEDIATELY — past claim, submitting now`);
+        // Call fire directly (not via setImmediate) to minimize delay
+        await fire(jobId, job.walletId, txs, new Date(), clients, cleanup, job.runJobId);
+    } else {
+        // ── Scheduled claim: normal timed fire ───────────────────────────────
+        const now = Date.now();
+        const adjustedFireTime = new Date(job.claimTime.getTime() - job.fireBeforeMs);
+        const fireDelay = Math.max(0, adjustedFireTime.getTime() - now);
+        log('info', `⏰ FIRE SCHEDULED AT ${adjustedFireTime.toISOString()} (in ${(fireDelay / 1000).toFixed(1)}s) — ${job.fireBeforeMs}ms before claimTime ${job.claimTime.toISOString()}`);
+        setTimeout(() => fire(jobId, job.walletId, txs, adjustedFireTime, clients, cleanup, job.runJobId), fireDelay);
+    }
 }
 
 // ── Fire function ────────────────────────────────────────────────────────────
@@ -353,6 +371,8 @@ export async function executeClaim(req, userId) {
     logger.info(`[claim/execute] tx valid window = ${validForMs}ms after claimTime (MaxTime)`);
 
     const rpcCount = clientPool.lenByNetwork(req.network);
+    console.log("Rpc count: ", rpcCount);
+
     if (rpcCount === 0) throw Errors.ErrNoRPCNodes;
     if (!uuidValidate(req.walletId)) throw Errors.ErrWalletNotFound;
 
@@ -376,6 +396,27 @@ export async function executeClaim(req, userId) {
         let feeAccounts = await getDecryptedFeeAccounts(req.txCount, req.network);
         if (feeAccounts.length === 0) throw new Error(Errors.ErrNotEnoughFeeAccounts);
         const mnemonic = await getDecryptedMnemonic(req.walletId);
+
+        // ── Pre-flight: verify claimant can authorize payments (med threshold) ──
+        const claimantKP = mnemonicToKeypair(mnemonic);
+        const claimantAddr = claimantKP.publicKey();
+        const clients = clientPool.getAllByNetwork(req.network);
+        const claimantAccount = await loadAccountFull(clients[0], claimantAddr);
+
+        const medThreshold = claimantAccount.thresholds.med_threshold;
+        const masterSigner = claimantAccount.signers.find(s => s.key === claimantAddr);
+        const masterWeight = masterSigner?.weight ?? 0;
+
+        logger.info(`[claim/execute] claimant ${claimantAddr} — masterWeight=${masterWeight} medThreshold=${medThreshold} signers=${claimantAccount.signers.length}`);
+
+        if (masterWeight < medThreshold) {
+            const detail = `claimant master key weight (${masterWeight}) is below medium threshold (${medThreshold}) — payment operation will fail with op_bad_auth. Account has ${claimantAccount.signers.length} signer(s).`;
+            logger.warn(`[claim/execute] REJECTED — ${detail}`);
+            // Reset status back to UNCLAIMED so it can be retried after fixing signers
+            await markClaimStatusCond(req.walletId, 'UNCLAIMED', '', '', 'PROCESSING');
+            throw new Error(`${Errors.ErrClaimantMultisig}: ${detail}`);
+        }
+
         const actualTxCount = feeAccounts.length;
 
         await repo.createRun({

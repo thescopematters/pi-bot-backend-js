@@ -12,4 +12,5 @@ export const Errors = {
     ErrNoTargetAddress: 'target_address_not_configured',
     ErrNoRPCNodes: 'no_rpc_nodes_available',
     ErrInvalidFeeRange: 'min_fee_cannot_exceed_max_fee',
+    ErrClaimantMultisig: 'claimant_requires_multisig',
 };

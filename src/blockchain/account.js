@@ -46,3 +46,26 @@ export async function loadAccount(server, address) {
     const acc = await server.loadAccount(address);
     return { accountID: acc.accountId(), sequence: acc.sequenceNumber() };
 }
+
+/**
+ * Load a Stellar account with full details (signers, thresholds, flags).
+ * Used for pre-flight checks like multisig validation.
+ *
+ * @param {import('@stellar/stellar-sdk').Server} server
+ * @param {string} address
+ * @returns {Promise<{
+ *   accountID: string,
+ *   sequence: string,
+ *   signers: Array<{ key: string, weight: number, type: string }>,
+ *   thresholds: { low_threshold: number, med_threshold: number, high_threshold: number }
+ * }>}
+ */
+export async function loadAccountFull(server, address) {
+    const acc = await server.loadAccount(address);
+    return {
+        accountID: acc.accountId(),
+        sequence: acc.sequenceNumber(),
+        signers: acc.signers,
+        thresholds: acc.thresholds,
+    };
+}
