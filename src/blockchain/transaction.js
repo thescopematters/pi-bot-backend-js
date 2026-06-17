@@ -73,7 +73,18 @@ export function buildMultiSigClaim({
     // MaxTime = max(claimTime, now) + validForMs. MinTime = 0
     // When claimTime is in the past, use current time as the base so the tx isn't born expired.
     const baseTime = Math.max(claimTime.getTime(), Date.now());
+
+    console.log("Date.now()=", Date.now());
+    console.log("claimTime.getTime()=", claimTime.getTime());
+    console.log("baseTime=", baseTime);
+
+
     const maxTime = Math.floor(baseTime / 1000) + Math.floor(validForMs / 1000);
+
+    console.log("Math.floor(baseTime / 1000: ", Math.floor(baseTime / 1000));
+    console.log("Math.floor(validForMs / 1000): ", Math.floor(validForMs / 1000));
+    console.log("maxTime: ", maxTime);
+
 
     const account = new Account(feePayerAccount.accountID, feePayerAccount.sequence);
 
