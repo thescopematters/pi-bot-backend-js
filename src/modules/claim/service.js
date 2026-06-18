@@ -299,8 +299,9 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
         return;
     }
 
-    log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
-    await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
+    log('info', `job ${jobId} — ${successCount} bumps accepted`);
+    //log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
+    //await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
     cleanup();
 }
 
