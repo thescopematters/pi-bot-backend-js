@@ -11,7 +11,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
 import pkg from '@stellar/stellar-sdk';
 const { Keypair } = pkg;
-import { validateMnemonic, mnemonicToSeedSync } from 'bip39';
+import { validateMnemonic, mnemonicToSeedSync, mnemonicToSeed } from 'bip39';
 
 const SEED_MODIFIER = 'ed25519 seed';
 const HARDENED_OFFSET = 0x80000000;
@@ -63,12 +63,13 @@ function deriveForPath(path, seed) {
  * @param {number} index     Account index (default 0)
  * @returns {Keypair}        Stellar SDK Keypair (Full)
  */
-export function mnemonicToKeypairAt(mnemonic, index = 0) {
+export async function mnemonicToKeypairAt(mnemonic, index = 0) {
     const normalized = mnemonic.trim().toLowerCase().split(/\s+/).join(' ');
     if (!validateMnemonic(normalized)) {
         throw new Error('Invalid BIP-39 mnemonic');
     }
-    const seed = mnemonicToSeedSync(normalized); // 64 bytes, no passphrase
+    // const seed = mnemonicToSeedSync(normalized); // 64 bytes, no passphrase
+    const seed = await mnemonicToSeed(normalized); // 64 bytes, no passphrase
     const path = `m/44'/314159'/${index}'`;
     const { key } = deriveForPath(path, seed);
     // key is 32 bytes — use it as raw ed25519 seed
@@ -78,6 +79,6 @@ export function mnemonicToKeypairAt(mnemonic, index = 0) {
 /**
  * Convenience: derive at index 0.
  */
-export function mnemonicToKeypair(mnemonic) {
+export async function mnemonicToKeypair(mnemonic) {
     return mnemonicToKeypairAt(mnemonic, 0);
 }

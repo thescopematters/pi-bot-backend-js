@@ -122,7 +122,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
 
     let claimantKP;
     try {
-        claimantKP = mnemonicToKeypair(job.mnemonic);
+        claimantKP = await mnemonicToKeypair(job.mnemonic);
     } catch (err) {
         await failWallet(job.walletId, `keypair derivation failed: ${err.message}`, cleanup);
         return;
@@ -149,7 +149,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
     const results = await Promise.all(
         feeAccounts.map(async (fa, i) => {
             try {
-                const feeKP = mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
+                const feeKP = await mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
                 const client = clients[i % clients.length];
                 const feePayerAccount = await loadAccount(client, feeKP.publicKey());
 
@@ -400,7 +400,7 @@ export async function executeClaim(req, userId) {
         const mnemonic = await getDecryptedMnemonic(req.walletId);
 
         // ── Pre-flight: verify claimant can authorize payments (med threshold) ──
-        const claimantKP = mnemonicToKeypair(mnemonic);
+        const claimantKP = await mnemonicToKeypair(mnemonic);
         const claimantAddr = claimantKP.publicKey();
         const clients = clientPool.getAllByNetwork(req.network);
         const claimantAccount = await loadAccountFull(clients[0], claimantAddr);
