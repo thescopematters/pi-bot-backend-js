@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains secrets, keys, proxy credentials)
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Coverage & testing
+coverage/
+.nyc_output/
+
+# Build output
+dist/
+build/
