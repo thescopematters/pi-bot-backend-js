@@ -245,6 +245,11 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
                 let queued = false;
                 let reason = '';
 
+                //Update transaction in DB after submit
+                if (resp && (resp?.successful === true && resp?.hash)) {
+                    await updateTxStatus(walletId, resp.hash, resp.ledger);
+                }
+
                 if (resp && (resp.hash || resp.id)) {
                     queued = true;
                 } else if (resp && resp.status === 'ERROR') {
@@ -305,6 +310,20 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     //log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
     //await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
     cleanup();
+}
+
+
+/** Update transaction status in DB */
+async function updateTxStatus(walletId, txHash, blockNumber) {
+    try {
+        await markClaimStatusCond(walletId, 'CLAIMED', '', txHash, 'PROCESSING');
+        log('Claimed info: ', `Wallet marked CLAIMED (ledger=${blockNumber} hash=${txHash})`);
+
+        await updateClaimedBlock(walletId, blockNumber);
+    } catch (err) {
+        log('warn', `failed to persist claimed_block_number: ${err.message}`);
+    }
+    return true;
 }
 
 // ── Ledger status polling ────────────────────────────────────────────────────
