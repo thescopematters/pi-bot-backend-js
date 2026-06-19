@@ -120,7 +120,7 @@ export function buildMultiSigClaim({
     tx.sign(claimantKP);
 
     // print complete transaction json
-    console.log('Complete transaction JSON: ', JSON.stringify(tx));
+    // console.log('Complete transaction JSON: ', JSON.stringify(tx));
 
     return {
         xdr: tx.toEnvelope().toXDR('base64'),

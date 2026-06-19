@@ -231,7 +231,8 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     let winningHash = '';
     const stats = feeBumps.map(() => ({ accepted: 0, rejected: 0, hash: '', reasons: new Map() }));
 
-    await Promise.all(
+    // await Promise.all(
+    await Promise.allSettled(
         feeBumps.map(async (bump, idx) => {
             const client = clients[idx % clients.length];
             const submitStart = Date.now();
@@ -239,6 +240,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
             try {
                 // Submit the stored Transaction object, not the XDR string
                 const resp = await client.submitTransaction(bump.transaction);
+                console.log("Response for Submited Transaction: ", resp);
                 const elapsed = Date.now() - submitStart;
                 let queued = false;
                 let reason = '';
