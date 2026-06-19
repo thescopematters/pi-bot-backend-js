@@ -208,10 +208,13 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     const log = (level, msg) => logger[level](`[claim/fire] job=${jobId} ${msg}`);
 
     const deadline = fireTime.getTime();
-    while (Date.now() < deadline - BUSYWAIT_LEAD_MS) {
-        await new Promise(resolve => setImmediate(resolve));
-    }
-    while (Date.now() < deadline) { /* spin */ }
+    /**
+     * Commented to improve the tx submittion speed
+     */
+    // while (Date.now() < deadline - BUSYWAIT_LEAD_MS) {
+    //     await new Promise(resolve => setImmediate(resolve));
+    // }
+    // while (Date.now() < deadline) { /* spin */ }
 
     const actual = new Date();
     const drift = actual.getTime() - deadline;
