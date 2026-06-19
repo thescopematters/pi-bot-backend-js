@@ -5,10 +5,14 @@
 import 'dotenv/config';
 import app from './app.js';
 import { env } from './config/env.js';
+import { configureProxy } from './config/proxy.js';
 import { clientPool } from './blockchain/clientPool.js';
 import logger from './common/logger.js';
 
 async function main() {
+    // Configure outbound proxy for all Horizon/Stellar requests (if PROXY_URL is set)
+    configureProxy();
+
     // Load Horizon RPC clients from DB
     try {
         await clientPool.load();

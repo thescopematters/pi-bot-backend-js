@@ -27,7 +27,7 @@ import logger from '../../common/logger.js';
 const BUSYWAIT_LEAD_MS = 10;    // CPU busywait final 10ms for precision
 const LEDGER_LOOKUP_ATTEMPTS = 6;
 const LEDGER_LOOKUP_INTERVAL_MS = 3000;
-const DEFAULT_VALID_FOR_MS = 5000; // 5 seconds
+const DEFAULT_VALID_FOR_MS = 30000; // 5 seconds
 const IMMEDIATE_CLAIM_VALID_FOR_MS = 30000; // 30 seconds — generous window for past claims
 
 // ── Active jobs (mirrors sync.Map) ───────────────────────────────────────────
@@ -122,7 +122,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
 
     let claimantKP;
     try {
-        claimantKP = mnemonicToKeypair(job.mnemonic);
+        claimantKP = await mnemonicToKeypair(job.mnemonic);
     } catch (err) {
         await failWallet(job.walletId, `keypair derivation failed: ${err.message}`, cleanup);
         return;
@@ -149,7 +149,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
     const results = await Promise.all(
         feeAccounts.map(async (fa, i) => {
             try {
-                const feeKP = mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
+                const feeKP = await mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
                 const client = clients[i % clients.length];
                 const feePayerAccount = await loadAccount(client, feeKP.publicKey());
 
@@ -161,7 +161,8 @@ async function preload(jobId, job, feeAccounts, cleanup) {
                     amount: job.balanceAmount,
                     targetAddress: job.targetAddress,
                     memo: job.memo,
-                    fee: BigInt(job.maxFee),
+                    // fee: BigInt(job.maxFee),
+                    fee: job.maxFee,
                     networkPassphrase: job.passphrase,
                     claimTime: job.claimTime,
                     validForMs: effectiveValidForMs,
@@ -298,8 +299,9 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
         return;
     }
 
-    log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
-    await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
+    log('info', `job ${jobId} — ${successCount} bumps accepted`);
+    //log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
+    //await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
     cleanup();
 }
 
@@ -398,7 +400,7 @@ export async function executeClaim(req, userId) {
         const mnemonic = await getDecryptedMnemonic(req.walletId);
 
         // ── Pre-flight: verify claimant can authorize payments (med threshold) ──
-        const claimantKP = mnemonicToKeypair(mnemonic);
+        const claimantKP = await mnemonicToKeypair(mnemonic);
         const claimantAddr = claimantKP.publicKey();
         const clients = clientPool.getAllByNetwork(req.network);
         const claimantAccount = await loadAccountFull(clients[0], claimantAddr);
