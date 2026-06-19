@@ -27,7 +27,7 @@ import logger from '../../common/logger.js';
 const BUSYWAIT_LEAD_MS = 10;    // CPU busywait final 10ms for precision
 const LEDGER_LOOKUP_ATTEMPTS = 6;
 const LEDGER_LOOKUP_INTERVAL_MS = 3000;
-const DEFAULT_VALID_FOR_MS = 30000; // 5 seconds
+const DEFAULT_VALID_FOR_MS = 120000; // 5 seconds
 const IMMEDIATE_CLAIM_VALID_FOR_MS = 30000; // 30 seconds — generous window for past claims
 
 // ── Active jobs (mirrors sync.Map) ───────────────────────────────────────────
