@@ -27,7 +27,7 @@ import logger from '../../common/logger.js';
 const BUSYWAIT_LEAD_MS = 10;    // CPU busywait final 10ms for precision
 const LEDGER_LOOKUP_ATTEMPTS = 6;
 const LEDGER_LOOKUP_INTERVAL_MS = 3000;
-const DEFAULT_VALID_FOR_MS = 120000; // 5 seconds
+const DEFAULT_VALID_FOR_MS = 60000; // 60 seconds - This time will define how long the transaction remains valid and can be edit to the block
 const IMMEDIATE_CLAIM_VALID_FOR_MS = 30000; // 30 seconds — generous window for past claims
 
 // ── Active jobs (mirrors sync.Map) ───────────────────────────────────────────
@@ -240,7 +240,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
             try {
                 // Submit the stored Transaction object, not the XDR string
                 const resp = await client.submitTransaction(bump.transaction);
-                console.log("Response for Submited Transaction: ", resp);
+                log('info', `Response for Submited Transaction: ${JSON.stringify(resp)}`);
                 const elapsed = Date.now() - submitStart;
                 let queued = false;
                 let reason = '';
@@ -271,7 +271,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
                 let reason = err.message;
                 if (err.response?.data) {
                     const d = err.response.data;
-                    console.log('Full error response:', JSON.stringify(d, null, 2));
+                    log('error', `Full error response: ${JSON.stringify(d, null, 2)}`);
                     reason = `http=${err.response.status} title=${JSON.stringify(d.title)} detail=${JSON.stringify(d.detail)}`;
                 }
                 log('warn', `bump ${bump.index} via ${client.serverURL} — REJECTED (${elapsed}ms) hash=${bump.hash} feeAccount=${bump.feeAccount} baseFee=${bump.fee} reason=${reason}`);
@@ -375,7 +375,7 @@ export async function executeClaim(req, userId) {
     logger.info(`[claim/execute] tx valid window = ${validForMs}ms after claimTime (MaxTime)`);
 
     const rpcCount = clientPool.lenByNetwork(req.network);
-    console.log("Rpc count: ", rpcCount);
+    logger.info(`Rpc count: ${rpcCount}`);
 
     if (rpcCount === 0) throw Errors.ErrNoRPCNodes;
     if (!uuidValidate(req.walletId)) throw Errors.ErrWalletNotFound;
