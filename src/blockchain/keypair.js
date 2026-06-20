@@ -11,7 +11,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
 import pkg from '@stellar/stellar-sdk';
 const { Keypair } = pkg;
-import { validateMnemonic, mnemonicToSeedSync } from 'bip39';
+import { validateMnemonic, mnemonicToSeedSync, mnemonicToSeed } from 'bip39';
 
 const SEED_MODIFIER = 'ed25519 seed';
 const HARDENED_OFFSET = 0x80000000;

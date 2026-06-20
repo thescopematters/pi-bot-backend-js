@@ -20,8 +20,8 @@ export async function createRun(run) {
     try {
         await pool.query(
             `INSERT INTO claim_runs
-        (job_id, wallet_id, network, tx_count, min_fee, max_fee, memo, fire_before_ms, scheduled_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        (job_id, wallet_id, network, tx_count, min_fee, max_fee, memo, fire_before_ms, scheduled_at, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
                 run.jobId,
                 run.walletId,
@@ -32,6 +32,7 @@ export async function createRun(run) {
                 run.memo ?? '',
                 run.fireBeforeMs,
                 run.scheduledAt,
+                run.userId,
             ],
         );
         console.log(`${REPO_TAG} createRun OK (${Date.now() - t0}ms) — jobId=${run.jobId}`);

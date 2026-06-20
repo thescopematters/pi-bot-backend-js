@@ -27,7 +27,7 @@ import logger from '../../common/logger.js';
 const BUSYWAIT_LEAD_MS = 10;    // CPU busywait final 10ms for precision
 const LEDGER_LOOKUP_ATTEMPTS = 6;
 const LEDGER_LOOKUP_INTERVAL_MS = 3000;
-const DEFAULT_VALID_FOR_MS = 5000; // 5 seconds
+const DEFAULT_VALID_FOR_MS = 60000; // 60 seconds - This time will define how long the transaction remains valid and can be edit to the block
 const IMMEDIATE_CLAIM_VALID_FOR_MS = 30000; // 30 seconds — generous window for past claims
 
 // ── Active jobs (mirrors sync.Map) ───────────────────────────────────────────
@@ -159,7 +159,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
 
     let claimantKP;
     try {
-        claimantKP = mnemonicToKeypair(job.mnemonic);
+        claimantKP = await mnemonicToKeypair(job.mnemonic);
     } catch (err) {
         await failWallet(job.walletId, `keypair derivation failed: ${err.message}`, cleanup);
         return;
@@ -186,7 +186,7 @@ async function preload(jobId, job, feeAccounts, cleanup) {
     const results = await Promise.all(
         feeAccounts.map(async (fa, i) => {
             try {
-                const feeKP = mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
+                const feeKP = await mnemonicToKeypairAt(fa.mnemonic, fa.derivationIndex);
                 const client = clients[i % clients.length];
                 const feePayerAccount = await loadAccount(client, feeKP.publicKey());
 
@@ -198,7 +198,8 @@ async function preload(jobId, job, feeAccounts, cleanup) {
                     amount: job.balanceAmount,
                     targetAddress: job.targetAddress,
                     memo: job.memo,
-                    fee: BigInt(job.maxFee),
+                    // fee: BigInt(job.maxFee),
+                    fee: job.maxFee,
                     networkPassphrase: job.passphrase,
                     claimTime: job.claimTime,
                     validForMs: effectiveValidForMs,
@@ -267,7 +268,11 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     let winningHash = '';
     const stats = feeBumps.map(() => ({ accepted: 0, rejected: 0, hash: '', reasons: new Map() }));
 
-    await Promise.all(
+    const submissionStartedAt = new Date();
+    const submissionStartMs = performance.now();
+
+    // await Promise.all(
+    await Promise.allSettled(
         feeBumps.map(async (bump, idx) => {
             const client = clients[idx % clients.length];
             const submitStart = Date.now();
@@ -275,6 +280,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
             try {
                 // Submit the stored Transaction object, not the XDR string
                 const resp = await client.submitTransaction(bump.transaction);
+                log('info', `Response for Submited Transaction: ${JSON.stringify(resp)}`);
                 const elapsed = Date.now() - submitStart;
                 let queued = false;
                 let reason = '';
@@ -305,7 +311,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
                 let reason = err.message;
                 if (err.response?.data) {
                     const d = err.response.data;
-                    console.log('Full error response:', JSON.stringify(d, null, 2));
+                    log('error', `Full error response: ${JSON.stringify(d, null, 2)}`);
                     reason = `http=${err.response.status} title=${JSON.stringify(d.title)} detail=${JSON.stringify(d.detail)}`;
                 }
                 log('warn', `bump ${bump.index} via ${client.serverURL} — REJECTED (${elapsed}ms) hash=${bump.hash} feeAccount=${bump.feeAccount} baseFee=${bump.fee} reason=${reason}`);
@@ -315,6 +321,15 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
             }
         }),
     );
+
+    const submissionEndMs = performance.now();
+    const submissionDurationMs = (submissionEndMs - submissionStartMs).toFixed(2);
+    const submissionCompletedAt = new Date();
+
+    log('info', `⏱️ BATCH SUBMISSION COMPLETE:
+    - Started at: ${submissionStartedAt.toISOString()}
+    - Ended at:   ${submissionCompletedAt.toISOString()}
+    - Duration:   ${submissionDurationMs}ms for ${feeBumps.length} txs`);
 
     for (let i = 0; i < feeBumps.length; i++) {
         const bump = feeBumps[i];
@@ -329,14 +344,15 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     log('info', `all submissions complete — ${successCount}/${feeBumps.length} unique bumps accepted by node`);
 
     if (successCount === 0) {
-        await markClaimStatusCond(walletId, 'FAILED', lastErr, '', 'PROCESSING');
+        await markClaimStatusCond(walletId, 'FAILED', lastErr, feeBumps[0]?.hash || '', 'PROCESSING');
         log('warn', `job ${jobId} — wallet marked FAILED (no bumps accepted by node)`);
         cleanup();
         return;
     }
 
-    log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
-    await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
+    log('info', `job ${jobId} — ${successCount} bumps accepted`);
+    //log('info', `job ${jobId} — ${successCount} bumps accepted, waiting for ledger confirmation...`);
+    //await logLedgerStatuses(jobId, walletId, feeBumps, clients, runJobId);
     cleanup();
 }
 
@@ -435,7 +451,7 @@ export async function executeClaim(req, userId) {
         const mnemonic = await getDecryptedMnemonic(req.walletId);
 
         // ── Pre-flight: verify claimant can authorize payments (med threshold) ──
-        const claimantKP = mnemonicToKeypair(mnemonic);
+        const claimantKP = await mnemonicToKeypair(mnemonic);
         const claimantAddr = claimantKP.publicKey();
         const clients = clientPool.getAllByNetwork(req.network);
         const claimantAccount = await loadAccountFull(clients[0], claimantAddr);
