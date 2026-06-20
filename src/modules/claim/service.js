@@ -231,6 +231,9 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     let winningHash = '';
     const stats = feeBumps.map(() => ({ accepted: 0, rejected: 0, hash: '', reasons: new Map() }));
 
+    const submissionStartedAt = new Date();
+    const submissionStartMs = performance.now();
+
     // await Promise.all(
     await Promise.allSettled(
         feeBumps.map(async (bump, idx) => {
@@ -281,6 +284,15 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
             }
         }),
     );
+
+    const submissionEndMs = performance.now();
+    const submissionDurationMs = (submissionEndMs - submissionStartMs).toFixed(2);
+    const submissionCompletedAt = new Date();
+
+    log('info', `⏱️ BATCH SUBMISSION COMPLETE:
+    - Started at: ${submissionStartedAt.toISOString()}
+    - Ended at:   ${submissionCompletedAt.toISOString()}
+    - Duration:   ${submissionDurationMs}ms for ${feeBumps.length} txs`);
 
     for (let i = 0; i < feeBumps.length; i++) {
         const bump = feeBumps[i];
