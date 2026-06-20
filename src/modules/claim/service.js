@@ -40,19 +40,37 @@ function networkPassphrase(network) {
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
+const DB_TAG = '[claim/service/db]';
+
 async function getWalletByID(walletId) {
+    console.log(`${DB_TAG} getWalletByID — walletId=${walletId}`);
+    const t0 = Date.now();
     const result = await pool.query('SELECT * FROM wallets WHERE id = $1', [walletId]);
-    return result.rows[0] ?? null;
+    const row = result.rows[0] ?? null;
+    if (row) {
+        console.log(`${DB_TAG} getWalletByID OK (${Date.now() - t0}ms) — found wallet claim_status=${row.claim_status} claim_time=${row.claim_time} balance_id=${row.balance_id} claim_amount=${row.claim_amount}`);
+    } else {
+        console.warn(`${DB_TAG} getWalletByID (${Date.now() - t0}ms) — NOT FOUND walletId=${walletId}`);
+    }
+    return row;
 }
 
 async function getTargetAddress(userId) {
+    console.log(`${DB_TAG} getTargetAddress — userId=${userId}`);
+    const t0 = Date.now();
     const result = await pool.query('SELECT target_address FROM users WHERE id = $1', [userId]);
     const row = result.rows[0];
-    if (!row || !row.target_address) throw new Error(Errors.ErrNoTargetAddress);
+    if (!row || !row.target_address) {
+        console.warn(`${DB_TAG} getTargetAddress (${Date.now() - t0}ms) — NO TARGET ADDRESS for userId=${userId}`);
+        throw new Error(Errors.ErrNoTargetAddress);
+    }
+    console.log(`${DB_TAG} getTargetAddress OK (${Date.now() - t0}ms) — targetAddress=${row.target_address}`);
     return row.target_address;
 }
 
 async function markClaimStatusCond(walletId, newStatus, reason, txHash, ifStatus) {
+    console.log(`${DB_TAG} markClaimStatusCond — walletId=${walletId} ${ifStatus} → ${newStatus} reason="${reason}" txHash="${txHash ?? ''}"`);
+    const t0 = Date.now();
     const now = new Date();
     const result = await pool.query(
         `UPDATE wallets
@@ -64,14 +82,21 @@ async function markClaimStatusCond(walletId, newStatus, reason, txHash, ifStatus
          WHERE id = $5 AND claim_status = $6::varchar`,
         [newStatus, reason, txHash ?? '', now, walletId, ifStatus],
     );
-    return result.rowCount === 1;
+    const updated = result.rowCount === 1;
+    console.log(`${DB_TAG} markClaimStatusCond (${Date.now() - t0}ms) — rowsUpdated=${result.rowCount} updated=${updated}`);
+    return updated;
 }
 
 async function updateClaimedBlock(walletId, blockNumber) {
+    console.log(`${DB_TAG} updateClaimedBlock — walletId=${walletId} blockNumber=${blockNumber}`);
+    const t0 = Date.now();
     await pool.query('UPDATE wallets SET claimed_block_number = $1 WHERE id = $2', [blockNumber, walletId]);
+    console.log(`${DB_TAG} updateClaimedBlock OK (${Date.now() - t0}ms)`);
 }
 
 async function getDecryptedFeeAccounts(n, network) {
+    console.log(`${DB_TAG} getDecryptedFeeAccounts — requesting n=${n} accounts for network=${network}`);
+    const t0 = Date.now();
     const result = await pool.query(
         `SELECT fa.id AS address_id, fa.address, fa.derivation_index, fm.encrypted_mnemonic
          FROM fee_addresses fa
@@ -80,23 +105,35 @@ async function getDecryptedFeeAccounts(n, network) {
          LIMIT $2`,
         [network, n],
     );
-    return result.rows.map(row => ({
-        id: row.address_id,
-        address: row.address,
-        mnemonic: decrypt(row.encrypted_mnemonic),
-        derivationIndex: row.derivation_index,
-    }));
+    console.log(`${DB_TAG} getDecryptedFeeAccounts query OK (${Date.now() - t0}ms) — rows=${result.rows.length}`);
+    const accounts = result.rows.map((row, i) => {
+        console.log(`${DB_TAG}   decrypting fee account [${i}] address=${row.address} derivationIndex=${row.derivation_index}`);
+        const mnemonic = decrypt(row.encrypted_mnemonic);
+        return { id: row.address_id, address: row.address, mnemonic, derivationIndex: row.derivation_index };
+    });
+    console.log(`${DB_TAG} getDecryptedFeeAccounts done — ${accounts.length} accounts decrypted`);
+    return accounts;
 }
 
 async function getDecryptedMnemonic(walletId) {
+    console.log(`${DB_TAG} getDecryptedMnemonic — walletId=${walletId}`);
+    const t0 = Date.now();
     const result = await pool.query('SELECT encrypted_mnemonic FROM wallets WHERE id = $1', [walletId]);
     const row = result.rows[0];
-    if (!row) throw new Error(Errors.ErrWalletNotFound);
-    return decrypt(row.encrypted_mnemonic);
+    if (!row) {
+        console.warn(`${DB_TAG} getDecryptedMnemonic (${Date.now() - t0}ms) — wallet NOT FOUND walletId=${walletId}`);
+        throw new Error(Errors.ErrWalletNotFound);
+    }
+    console.log(`${DB_TAG} getDecryptedMnemonic query OK (${Date.now() - t0}ms) — decrypting...`);
+    const mnemonic = decrypt(row.encrypted_mnemonic);
+    console.log(`${DB_TAG} getDecryptedMnemonic decrypted OK — wordCount=${mnemonic.trim().split(/\s+/).length}`);
+    return mnemonic;
 }
 
 async function failWallet(walletId, reason, cleanup) {
+    console.warn(`${DB_TAG} failWallet — walletId=${walletId} reason="${reason}"`);
     await markClaimStatusCond(walletId, 'FAILED', reason, '', 'PROCESSING');
+    console.log(`${DB_TAG} failWallet — status set to FAILED, running cleanup`);
     cleanup();
 }
 
@@ -371,7 +408,7 @@ export async function executeClaim(req, userId) {
     logger.info(`[claim/execute] tx valid window = ${validForMs}ms after claimTime (MaxTime)`);
 
     const rpcCount = clientPool.lenByNetwork(req.network);
-    console.log("Rpc count: ", rpcCount);
+    console.log("[claim/execute] Rpc count: ", rpcCount);
 
     if (rpcCount === 0) throw Errors.ErrNoRPCNodes;
     if (!uuidValidate(req.walletId)) throw Errors.ErrWalletNotFound;

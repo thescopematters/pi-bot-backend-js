@@ -53,7 +53,10 @@ export class ClientPool {
      * @returns {Server[]}
      */
     getAllByNetwork(network) {
-        return this._clients.get(network.toUpperCase()) ?? [];
+        const key = network.toUpperCase();
+        const list = this._clients.get(key) ?? [];
+        console.log(`[clientPool] getAllByNetwork — network=${key} clients=${list.length}${list.length > 0 ? ' urls=[' + list.map(c => c.serverURL?.toString() ?? '?').join(', ') + ']' : ' (NONE)'}`);
+        return list;
     }
 
     /**
@@ -62,7 +65,9 @@ export class ClientPool {
      * @returns {number}
      */
     lenByNetwork(network) {
-        return this.getAllByNetwork(network).length;
+        const count = (this._clients.get(network.toUpperCase()) ?? []).length;
+        console.log(`[clientPool] lenByNetwork — network=${network.toUpperCase()} count=${count}`);
+        return count;
     }
 
     /**
@@ -72,8 +77,12 @@ export class ClientPool {
     get() {
         const all = [];
         for (const list of this._clients.values()) all.push(...list);
-        if (all.length === 0) throw new Error('no active RPC nodes available');
+        if (all.length === 0) {
+            console.error('[clientPool] get FAILED — no active RPC nodes available');
+            throw new Error('no active RPC nodes available');
+        }
         const idx = this._counter++ % all.length;
+        console.log(`[clientPool] get — round-robin idx=${idx}/${all.length} url=${all[idx].serverURL?.toString() ?? '?'}`);
         return all[idx];
     }
 

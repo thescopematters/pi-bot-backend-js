@@ -30,20 +30,33 @@ function getKey() {
  * @param {string} encoded  base64( nonce + ciphertext + tag )
  * @returns {string}         plaintext mnemonic
  */
+const CRYPTO_TAG = '[crypto]';
+
 export function decrypt(encoded) {
+    console.log(`${CRYPTO_TAG} decrypt — encoded length=${encoded?.length ?? 0} chars`);
     const data = Buffer.from(encoded, 'base64');
+    console.log(`${CRYPTO_TAG} decrypt — decoded ${data.length} bytes (min required=${NONCE_SIZE + TAG_SIZE})`);
     if (data.length < NONCE_SIZE + TAG_SIZE) {
+        console.error(`${CRYPTO_TAG} decrypt FAILED — ciphertext too short (${data.length} < ${NONCE_SIZE + TAG_SIZE})`);
         throw new Error('ciphertext too short');
     }
     const nonce = data.subarray(0, NONCE_SIZE);
     const tag = data.subarray(data.length - TAG_SIZE);
     const ciphertext = data.subarray(NONCE_SIZE, data.length - TAG_SIZE);
+    console.log(`${CRYPTO_TAG} decrypt — nonce=${nonce.length}B tag=${tag.length}B ciphertext=${ciphertext.length}B`);
 
+    console.log(`${CRYPTO_TAG} decrypt — creating AES-256-GCM decipher...`);
     const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), nonce);
     decipher.setAuthTag(tag);
 
-    const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return plain.toString('utf8');
+    try {
+        const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        console.log(`${CRYPTO_TAG} decrypt OK — plaintext ${plain.length} bytes`);
+        return plain.toString('utf8');
+    } catch (err) {
+        console.error(`${CRYPTO_TAG} decrypt FAILED — AES-GCM auth/decrypt error: ${err.message}`);
+        throw err;
+    }
 }
 
 /**

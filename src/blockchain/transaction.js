@@ -43,6 +43,8 @@ import { piToStroops, stroopsToPi } from './account.js';
  * @param {number}  params.validForMs
  * @returns {{ xdr: string, transaction: import('@stellar/stellar-sdk').Transaction }}
  */
+const TX_TAG = '[transaction]';
+
 export function buildMultiSigClaim({
     claimantKP,
     feePayerKP,
@@ -56,9 +58,16 @@ export function buildMultiSigClaim({
     claimTime,
     validForMs,
 }) {
+    console.log(`${TX_TAG} buildMultiSigClaim START`);
+    console.log(`${TX_TAG}   claimant=${claimantKP.publicKey()} feePayer=${feePayerKP.publicKey()}`);
+    console.log(`${TX_TAG}   feePayerAccount=${feePayerAccount.accountID} sequence=${feePayerAccount.sequence}`);
+    console.log(`${TX_TAG}   balanceID=${balanceID} amount=${amount} targetAddress=${targetAddress}`);
+    console.log(`${TX_TAG}   fee=${fee} networkPassphrase="${networkPassphrase}" claimTime=${claimTime.toISOString()} validForMs=${validForMs}`);
+
     // Subtract 1 stroop from payment to avoid underfunded errors
     const payStroops = piToStroops(amount) - 1n;
     const payAmount = stroopsToPi(payStroops);
+    console.log(`${TX_TAG} STEP 1 — amount calc: ${amount} Pi → ${payStroops} stroops → payAmount=${payAmount} (subtracted 1 stroop)`);
 
     // Always create a Memo object (even if none)
     let memoObj = Memo.none();
@@ -68,34 +77,33 @@ export function buildMultiSigClaim({
             ? Buffer.from(memo, 'utf8').subarray(0, 28).toString('utf8')
             : memo;
         memoObj = Memo.text(truncated);
+        console.log(`${TX_TAG} STEP 2 — memo set: "${truncated}" (original="${memo}"${truncated !== memo ? ' TRUNCATED' : ''})`);
+    } else {
+        console.log(`${TX_TAG} STEP 2 — memo: none`);
     }
 
     // MaxTime = max(claimTime, now) + validForMs. MinTime = 0
     // When claimTime is in the past, use current time as the base so the tx isn't born expired.
-    const baseTime = Math.max(claimTime.getTime(), Date.now());
-
-    console.log("Date.now()=", Date.now());
-    console.log("claimTime.getTime()=", claimTime.getTime());
-    console.log("baseTime=", baseTime);
-
-
+    const now = Date.now();
+    const baseTime = Math.max(claimTime.getTime(), now);
     const maxTime = Math.floor(baseTime / 1000) + Math.floor(validForMs / 1000);
-
-    console.log("Math.floor(baseTime / 1000: ", Math.floor(baseTime / 1000));
-    console.log("Math.floor(validForMs / 1000): ", Math.floor(validForMs / 1000));
-    console.log("maxTime: ", maxTime);
-
+    console.log(`${TX_TAG} STEP 3 — timebounds: now=${now} claimTime=${claimTime.getTime()} baseTime=${baseTime} (${baseTime === now ? 'PAST — using now' : 'FUTURE — using claimTime'})`);
+    console.log(`${TX_TAG}   maxTime=${maxTime} = floor(${baseTime}/1000)=${Math.floor(baseTime / 1000)} + floor(${validForMs}/1000)=${Math.floor(validForMs / 1000)} | minTime=0`);
+    console.log(`${TX_TAG}   maxTime as UTC: ${new Date(maxTime * 1000).toISOString()}`);
 
     const account = new Account(feePayerAccount.accountID, feePayerAccount.sequence);
+    console.log(`${TX_TAG} STEP 4 — Account object created: id=${feePayerAccount.accountID} seq=${feePayerAccount.sequence}`);
 
     const builder = new TransactionBuilder(account, {
         fee: fee.toString(),
         networkPassphrase,
         timebounds: { minTime: 0, maxTime },
     });
+    console.log(`${TX_TAG} STEP 5 — TransactionBuilder created: fee=${fee} network="${networkPassphrase}"`);
 
     // Always add memo (even if Memo.none())
     builder.addMemo(memoObj);
+    console.log(`${TX_TAG} STEP 6 — memo added`);
 
     builder.addOperation(
         Operation.claimClaimableBalance({
@@ -103,6 +111,7 @@ export function buildMultiSigClaim({
             source: claimantKP.publicKey(),
         }),
     );
+    console.log(`${TX_TAG} STEP 7 — op[0] claimClaimableBalance added: balanceId=${balanceID} source=${claimantKP.publicKey()}`);
 
     builder.addOperation(
         Operation.payment({
@@ -112,15 +121,19 @@ export function buildMultiSigClaim({
             source: claimantKP.publicKey(),
         }),
     );
+    console.log(`${TX_TAG} STEP 8 — op[1] payment added: destination=${targetAddress} amount=${payAmount} XLM source=${claimantKP.publicKey()}`);
 
     const tx = builder.build();
-    // Both fee payer and claimant must sign
-    // tx.sign(feePayerKP, claimantKP);
-    tx.sign(feePayerKP);
-    tx.sign(claimantKP);
+    console.log(`${TX_TAG} STEP 9 — transaction built`);
 
-    // print complete transaction json
-    console.log('Complete transaction JSON: ', JSON.stringify(tx));
+    tx.sign(feePayerKP);
+    console.log(`${TX_TAG} STEP 10 — signed by feePayer=${feePayerKP.publicKey()}`);
+    tx.sign(claimantKP);
+    console.log(`${TX_TAG} STEP 11 — signed by claimant=${claimantKP.publicKey()}`);
+
+    const hash = tx.hash().toString('hex');
+    console.log(`${TX_TAG} STEP 12 — tx hash=${hash}`);
+    console.log(`${TX_TAG} buildMultiSigClaim DONE`);
 
     return {
         xdr: tx.toEnvelope().toXDR('base64'),

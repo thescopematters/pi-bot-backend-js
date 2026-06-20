@@ -63,21 +63,38 @@ function deriveForPath(path, seed) {
  * @param {number} index     Account index (default 0)
  * @returns {Keypair}        Stellar SDK Keypair (Full)
  */
+const KP_TAG = '[keypair]';
+
 export function mnemonicToKeypairAt(mnemonic, index = 0) {
+    const wordCount = mnemonic.trim().split(/\s+/).length;
+    console.log(`${KP_TAG} mnemonicToKeypairAt — index=${index} wordCount=${wordCount}`);
+
     const normalized = mnemonic.trim().toLowerCase().split(/\s+/).join(' ');
-    if (!validateMnemonic(normalized)) {
+    const valid = validateMnemonic(normalized);
+    console.log(`${KP_TAG} mnemonic validation — valid=${valid}`);
+    if (!valid) {
+        console.error(`${KP_TAG} FAILED — invalid BIP-39 mnemonic (wordCount=${wordCount})`);
         throw new Error('Invalid BIP-39 mnemonic');
     }
+
+    console.log(`${KP_TAG} deriving seed from mnemonic...`);
     const seed = mnemonicToSeedSync(normalized); // 64 bytes, no passphrase
+    console.log(`${KP_TAG} seed derived — ${seed.length} bytes`);
+
     const path = `m/44'/314159'/${index}'`;
+    console.log(`${KP_TAG} deriving BIP-44 path=${path}`);
     const { key } = deriveForPath(path, seed);
-    // key is 32 bytes — use it as raw ed25519 seed
-    return Keypair.fromRawEd25519Seed(Buffer.from(key));
+    console.log(`${KP_TAG} path derived — key=${key.length} bytes`);
+
+    const kp = Keypair.fromRawEd25519Seed(Buffer.from(key));
+    console.log(`${KP_TAG} mnemonicToKeypairAt OK — publicKey=${kp.publicKey()}`);
+    return kp;
 }
 
 /**
  * Convenience: derive at index 0.
  */
 export function mnemonicToKeypair(mnemonic) {
+    console.log(`${KP_TAG} mnemonicToKeypair — delegating to mnemonicToKeypairAt(index=0)`);
     return mnemonicToKeypairAt(mnemonic, 0);
 }
