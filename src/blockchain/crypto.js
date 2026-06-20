@@ -31,19 +31,24 @@ function getKey() {
  * @returns {string}         plaintext mnemonic
  */
 export function decrypt(encoded) {
-    const data = Buffer.from(encoded, 'base64');
-    if (data.length < NONCE_SIZE + TAG_SIZE) {
-        throw new Error('ciphertext too short');
+    try{
+        const data = Buffer.from(encoded, 'base64');
+        if (data.length < NONCE_SIZE + TAG_SIZE) {
+            throw new Error('ciphertext too short');
+        }
+        const nonce = data.subarray(0, NONCE_SIZE);
+        const tag = data.subarray(data.length - TAG_SIZE);
+        const ciphertext = data.subarray(NONCE_SIZE, data.length - TAG_SIZE);
+    
+        const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), nonce);
+        decipher.setAuthTag(tag);
+    
+        const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return plain.toString('utf8');
+    }catch(err){
+        console.log("Error in decrypting mnemonic", err);
+        throw err;
     }
-    const nonce = data.subarray(0, NONCE_SIZE);
-    const tag = data.subarray(data.length - TAG_SIZE);
-    const ciphertext = data.subarray(NONCE_SIZE, data.length - TAG_SIZE);
-
-    const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), nonce);
-    decipher.setAuthTag(tag);
-
-    const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return plain.toString('utf8');
 }
 
 /**
