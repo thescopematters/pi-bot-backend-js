@@ -307,7 +307,7 @@ async function fire(jobId, walletId, feeBumps, fireTime, clients, cleanup, runJo
     log('info', `all submissions complete — ${successCount}/${feeBumps.length} unique bumps accepted by node`);
 
     if (successCount === 0) {
-        await markClaimStatusCond(walletId, 'FAILED', lastErr, '', 'PROCESSING');
+        await markClaimStatusCond(walletId, 'FAILED', lastErr, feeBumps[0]?.hash || '', 'PROCESSING');
         log('warn', `job ${jobId} — wallet marked FAILED (no bumps accepted by node)`);
         cleanup();
         return;
